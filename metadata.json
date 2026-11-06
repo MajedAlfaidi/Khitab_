@@ -1,0 +1,7 @@
+{
+  "name": "Khitab - خِطاب",
+  "description": "مساعد ذكي لتحضير وإلقاء الخطابات والعروض التقديمية باللغة العربية باحترافية وثقة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

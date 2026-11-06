@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Default deny all unknown collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profiles - private to each owner
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && incoming().uid == request.auth.uid;
+      allow update: if isOwner(userId) && incoming().uid == existing().uid;
+      allow delete: if false;
+
+      // Speeches subcollection - strictly isolated to the authenticated user
+      match /speeches/{speechId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) 
+          && isValidId(speechId)
+          && incoming().userId == request.auth.uid
+          && incoming().title is string && incoming().title.size() <= 300
+          && incoming().content is string && incoming().content.size() <= 50000;
+        allow update: if isOwner(userId) 
+          && isValidId(speechId)
+          && incoming().userId == existing().userId
+          && incoming().title is string && incoming().title.size() <= 300
+          && incoming().content is string && incoming().content.size() <= 50000;
+        allow delete: if isOwner(userId) && isValidId(speechId);
+      }
+    }
+  }
+}

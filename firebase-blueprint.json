@@ -1,0 +1,105 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Authenticated user profile entity for Khitab",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user ID"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User profile photo URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Profile creation timestamp"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Speech": {
+      "title": "Speech Document",
+      "description": "Speech preparation document owned by an authenticated user",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique speech identifier"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Speech title in Arabic"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 50000,
+          "description": "Full Arabic speech body text"
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Speech category or occasion"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "analyzed", "ready"],
+          "description": "Current workflow status"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation date text or ISO timestamp"
+        },
+        "lastEdited": {
+          "type": "string",
+          "description": "Last edit timestamp"
+        },
+        "estimatedMinutes": {
+          "type": "number",
+          "description": "Estimated speech duration in minutes"
+        },
+        "wordCount": {
+          "type": "number",
+          "description": "Total word count"
+        },
+        "audience": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Target audience notes"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Speaker personal notes"
+        }
+      },
+      "required": ["id", "userId", "title", "content", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user profile document accessible only by owner"
+    },
+    "/users/{userId}/speeches/{speechId}": {
+      "schema": "Speech",
+      "description": "Speeches owned exclusively by the authenticated user"
+    }
+  }
+}
