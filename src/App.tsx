@@ -12,13 +12,21 @@ import { SpeechEditor } from './components/SpeechEditor';
 import { SpeechAnalysis } from './components/SpeechAnalysis';
 import { PresentationMode } from './components/PresentationMode';
 import { DeliveryGuideModal } from './components/DeliveryGuideModal';
+import { WelcomeModal } from './components/WelcomeModal';
 
 import { useAuth } from './contexts/AuthContext';
 import { 
   subscribeToUserSpeeches, 
   saveSpeechToFirestore, 
-  deleteSpeechFromFirestore 
+  deleteSpeechFromFirestore,
+  migrateLocalSpeechesToFirestore 
 } from './services/speechService';
+import {
+  getLocalSpeeches,
+  saveLocalSpeech,
+  deleteLocalSpeech,
+  hasLocalSpeeches
+} from './services/localStorageService';
 
 type ActiveView = 'dashboard' | 'create' | 'analysis' | 'presentation';
 
@@ -35,10 +43,48 @@ export default function App() {
     return false;
   });
 
-  // Speeches library state (synced directly from Firestore)
-  const [speeches, setSpeeches] = useState<Speech[]>([]);
+  // First-visit welcome modal state
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const dismissed = localStorage.getItem('khitab_welcome_modal_dismissed');
+      return dismissed !== 'true';
+    }
+    return false;
+  });
+
+  const handleCloseWelcomeModal = () => {
+    setIsWelcomeModalOpen(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('khitab_welcome_modal_dismissed', 'true');
+    }
+  };
+
+  const handleSignInFromWelcomeModal = async () => {
+    handleCloseWelcomeModal();
+    try {
+      await signIn();
+    } catch (err) {
+      console.error('[WelcomeModal] Sign-in error:', err);
+    }
+  };
+
+  // If user is logged in, ensure welcome modal is closed and permanently marked dismissed
+  useEffect(() => {
+    if (user) {
+      setIsWelcomeModalOpen(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('khitab_welcome_modal_dismissed', 'true');
+      }
+    }
+  }, [user]);
+
+  // Speeches library state (local for anonymous users, Firestore for authenticated users)
+  const [speeches, setSpeeches] = useState<Speech[]>(() => {
+    return getLocalSpeeches();
+  });
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
 
   // Current view state
   const [currentView, setCurrentView] = useState<ActiveView>('dashboard');
@@ -57,46 +103,79 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Subscribe to Firestore speeches in real-time when authenticated
+  // Handle speeches source and automatic migration
   useEffect(() => {
     if (!user) {
-      setSpeeches([]);
+      // Unauthenticated: load from local storage
+      setSpeeches(getLocalSpeeches());
       setIsSyncing(false);
+      setSyncError(null);
       return;
     }
 
-    setIsSyncing(true);
-    setSyncError(null);
+    // Authenticated user: perform migration if local speeches exist
+    let isSubscribed = true;
 
-    const unsubscribe = subscribeToUserSpeeches(
-      user.uid,
-      (remoteSpeeches) => {
-        setSpeeches(remoteSpeeches);
-        setIsSyncing(false);
-      },
-      (error) => {
-        console.error('[Khitab] Firestore sync error:', error);
-        setSyncError('تعذر مزامنة الخطابات من السحابة. يرجى التحقق من الاتصال.');
-        setIsSyncing(false);
+    async function handleAuthInit() {
+      if (!user) return;
+
+      if (hasLocalSpeeches()) {
+        const local = getLocalSpeeches();
+        if (local.length > 0) {
+          try {
+            const migrationResult = await migrateLocalSpeechesToFirestore(user.uid, local);
+            if (migrationResult.success && migrationResult.migratedCount > 0) {
+              setMigrationNotice(`تمت مزامنة ${migrationResult.migratedCount} خطابًا محليًا ونقلها بنجاح إلى حسابك السحابي.`);
+              setTimeout(() => setMigrationNotice(null), 5000);
+            }
+          } catch (mErr: any) {
+            console.error('[Khitab] Migration error:', mErr);
+            setMigrationNotice('تعذر إكمال مزامنة بعض الخطابات المحلية إلى السحابة، وهي لا تزال محفوظة بأمان في متصفحك.');
+            setTimeout(() => setMigrationNotice(null), 6000);
+          }
+        }
       }
-    );
 
-    return () => unsubscribe();
+      setIsSyncing(true);
+      setSyncError(null);
+
+      const unsubscribe = subscribeToUserSpeeches(
+        user.uid,
+        (remoteSpeeches) => {
+          if (!isSubscribed) return;
+          setSpeeches(remoteSpeeches);
+          setIsSyncing(false);
+        },
+        (error) => {
+          if (!isSubscribed) return;
+          console.error('[Khitab] Firestore sync error:', error);
+          setSyncError('تعذر مزامنة الخطابات من السحابة. يرجى التحقق من الاتصال.');
+          setIsSyncing(false);
+        }
+      );
+
+      return unsubscribe;
+    }
+
+    const unsubPromise = handleAuthInit();
+
+    return () => {
+      isSubscribed = false;
+      unsubPromise.then((unsub) => unsub && unsub());
+    };
   }, [user]);
 
   const toggleDarkMode = () => {
     setIsDarkMode((prev) => !prev);
   };
 
-  // Handlers for speeches saving directly to Firestore
+  // Handlers for speeches: saves locally if unauthenticated, to Firestore if authenticated
   const handleSaveSpeech = async (speech: Speech) => {
     if (!user) {
-      try {
-        await signIn();
-      } catch (err) {
-        alert('يجب تسجيل الدخول بحساب Google أولاً لحفظ الخطاب في السحابة.');
-        return;
-      }
+      const saved = saveLocalSpeech(speech);
+      setSpeeches(getLocalSpeeches());
+      setSelectedSpeech(saved);
+      return;
     }
 
     try {
@@ -110,6 +189,15 @@ export default function App() {
 
   const handleDeleteSpeech = async (speechId: string) => {
     if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا الخطاب؟')) {
+      if (!user) {
+        deleteLocalSpeech(speechId);
+        setSpeeches(getLocalSpeeches());
+        if (selectedSpeech?.id === speechId) {
+          setSelectedSpeech(null);
+        }
+        return;
+      }
+
       try {
         await deleteSpeechFromFirestore(speechId);
         if (selectedSpeech?.id === speechId) {
@@ -203,6 +291,19 @@ export default function App() {
 
           {/* Main App Content Viewport */}
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Migration Notification Banner */}
+            {migrationNotice && (
+              <div className="mt-4 p-3.5 bg-[#F8F9FA] border border-[#212529] text-[#212529] rounded-xl text-sm flex items-center justify-between gap-3 animate-fadeIn">
+                <span>{migrationNotice}</span>
+                <button
+                  onClick={() => setMigrationNotice(null)}
+                  className="text-xs font-semibold underline hover:no-underline"
+                >
+                  إغلاق
+                </button>
+              </div>
+            )}
+
             {currentView === 'dashboard' && (
               <Dashboard
                 speeches={speeches}
@@ -262,6 +363,13 @@ export default function App() {
           <DeliveryGuideModal
             isOpen={isGuideOpen}
             onClose={() => setIsGuideOpen(false)}
+          />
+
+          {/* First-Visit Welcome & Onboarding Modal */}
+          <WelcomeModal
+            isOpen={isWelcomeModalOpen && !user && !authLoading}
+            onClose={handleCloseWelcomeModal}
+            onSignIn={handleSignInFromWelcomeModal}
           />
         </>
       )}

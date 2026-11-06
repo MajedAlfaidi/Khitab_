@@ -115,15 +115,6 @@ export const SpeechEditor: React.FC<SpeechEditorProps> = ({
       return;
     }
 
-    if (!user) {
-      setValidationError('يجب تسجيل الدخول بحساب Google أولاً لبدء التحليل الذكي للخطاب.');
-      try {
-        await signIn();
-      } catch {
-        return;
-      }
-    }
-
     setValidationError(null);
     setIsAnalyzing(true);
 
@@ -131,17 +122,24 @@ export const SpeechEditor: React.FC<SpeechEditorProps> = ({
     const timeoutId = setTimeout(() => abortController.abort(), 45000);
 
     try {
-      const idToken = await user?.getIdToken();
-      if (!idToken) {
-        throw new Error('تعذر استخراج رمز المصادقة. يرجى تسجيل الدخول مرة أخرى.');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (user) {
+        try {
+          const idToken = await user.getIdToken();
+          if (idToken) {
+            headers['Authorization'] = `Bearer ${idToken}`;
+          }
+        } catch (tokenErr) {
+          console.warn('[SpeechEditor] Could not fetch token, proceeding anonymously:', tokenErr);
+        }
       }
 
       const response = await fetch('/api/analyze-speech', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
-        },
+        headers,
         body: JSON.stringify({
           title: title.trim(),
           content: content.trim(),

@@ -15,7 +15,9 @@ import {
   Copy,
   ChevronLeft,
   LogIn,
-  AlertCircle
+  AlertCircle,
+  Cloud,
+  X
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -39,6 +41,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'analyzed' | 'draft'>('all');
+  const [isReminderDismissed, setIsReminderDismissed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('khitab_dashboard_reminder_dismissed') === 'true';
+    }
+    return false;
+  });
+
+  const handleDismissReminder = () => {
+    setIsReminderDismissed(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('khitab_dashboard_reminder_dismissed', 'true');
+    }
+  };
 
   // Quantitative stats
   const totalMinutes = useMemo(() => {
@@ -124,20 +139,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
           </div>
 
-          {/* Optional Cloud Account Link Card */}
-          {!user && (
-            <div className="pt-3">
-              <div className="p-3.5 bg-[#FFFFFF] border border-[#E9ECEF] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 text-[#6C757D]">
-                  <LogIn className="w-4 h-4 text-[#212529] shrink-0" />
-                  <span>سجّل دخولك بحساب Google لربط وحفظ خطاباتك ومسوداتك الخاصة بأمان.</span>
+          {/* Optional Cloud Sync Reminder Card (Subtle & Dismissible) */}
+          {!user && !isReminderDismissed && (
+            <div className="pt-3 animate-fadeIn">
+              <div className="p-3.5 bg-[#FFFFFF] border border-[#E9ECEF] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+                <div className="flex items-center gap-2.5 text-[#6C757D]">
+                  <Cloud className="w-4 h-4 text-[#212529] shrink-0" />
+                  <span>
+                    <strong className="text-[#212529] font-medium">مزامنة السحابة اختيارية:</strong> سجّل دخولك بحساب Google لمزامنة خطاباتك والوصول إليها عبر مختلف أجهزتك بأمان، أو واصل العمل محلياً.
+                  </span>
                 </div>
-                <button
-                  onClick={() => signIn()}
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#212529] hover:bg-[#343a40] text-[#FFFFFF] rounded-lg font-medium transition-colors whitespace-nowrap self-start sm:self-auto"
-                >
-                  <span>تسجيل الدخول عبر Google</span>
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                  <button
+                    onClick={() => signIn()}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#212529] hover:bg-[#343a40] text-[#FFFFFF] rounded-lg font-medium transition-colors whitespace-nowrap active:scale-[0.98]"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>تسجيل الدخول عبر Google</span>
+                  </button>
+                  <button
+                    onClick={handleDismissReminder}
+                    className="p-1.5 text-[#6C757D] hover:text-[#212529] hover:bg-[#F8F9FA] rounded-md transition-colors"
+                    title="إخفاء التنبيه"
+                    aria-label="إخفاء التنبيه"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -148,14 +176,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[#FFFFFF] border border-[#E9ECEF] rounded-xl p-5">
           <div className="flex items-center justify-between text-[#6C757D] text-sm mb-2">
-            <span>إجمالي الخطابات المحفوظة</span>
+            <span>{user ? 'الخطابات السحابية' : 'الخطابات المحفوظة محليًا'}</span>
             <FileText className="w-4 h-4 text-[#6C757D]" />
           </div>
           <div className="font-display text-3xl font-bold text-[#212529] tabular-nums">
             {speeches.length}
           </div>
           <div className="text-xs text-[#6C757D] mt-1">
-            جاهزة ومسودات مسجلة
+            {user ? 'متزامنة مع حسابك السحابي' : 'محفوظة بأمان على هذا المتصفح'}
           </div>
         </div>
 
@@ -271,14 +299,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   ? 'لم يتم العثور على خطابات تطابق البحث'
                   : user
                   ? 'لا توجد خطابات مسجلة في مكتبتك السحابية حتى الآن'
-                  : 'مرحبًا بك، سجّل دخولك لإدارة خطاباتك السحابية'}
+                  : 'لا توجد خطابات محفوظة محليًا حتى الآن'}
               </h3>
               <p className="text-sm text-[#6C757D] max-w-sm mx-auto">
                 {searchQuery
                   ? 'جرّب تعديل كلمات البحث أو تصفية الحالة.'
                   : user
                   ? 'ابدأ الآن بكتابة وتحضير خطابك الأول بكل ثقة وسهولة.'
-                  : 'سجّل دخولك بحساب Google لمزامنة وحفظ خطاباتك بأمان تام عبر أجهزتك.'}
+                  : 'ابدأ الآن بكتابة وتحضير خطابك الأول، واستخدم كافة أدوات التحليل والإلقاء مباشرة وبحرية.'}
               </p>
             </div>
             <div className="flex items-center justify-center gap-3">
@@ -312,9 +340,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div className="space-y-4">
                     {/* Top Row: Unboxed Category and Status Tag */}
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#6C757D] font-medium">
-                        {speech.category}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#6C757D] font-medium">
+                          {speech.category}
+                        </span>
+                        {!user && (
+                          <span className="text-[11px] px-2 py-0.5 rounded bg-[#F8F9FA] text-[#6C757D] border border-[#E9ECEF] font-medium">
+                            محلي
+                          </span>
+                        )}
+                        {user && (
+                          <span className="text-[11px] px-2 py-0.5 rounded bg-[#F8F9FA] text-[#212529] border border-[#E9ECEF] font-medium">
+                            سحابي
+                          </span>
+                        )}
+                      </div>
                       <span className={`px-2.5 py-1 rounded-md font-medium text-xs ${statusMeta.class}`}>
                         {statusMeta.text}
                       </span>

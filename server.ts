@@ -28,8 +28,8 @@ async function startServer() {
     });
   });
 
-  // Secure Speech Analysis API Endpoint
-  // Requires valid Firebase ID token; never logs speech text or user credentials
+  // Speech Analysis API Endpoint
+  // Supports both authenticated and anonymous callers with rate limiting safeguards
   app.post(
     '/api/analyze-speech',
     authenticateFirebaseUser,
